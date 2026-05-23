@@ -46,7 +46,11 @@ jobs:
         run: go build -v ./...
 
       - name: Unit tests with coverage
-        run: go test -v -count=1 -race -coverprofile=coverage.unit.out -covermode=atomic ./...
+        run: |
+          go test -v -count=1 -race \
+            -coverprofile=coverage.unit.out -covermode=atomic \
+            -coverpkg=github.com/mytheresa/go-hiring-challenge/... \
+            ./app/api ./app/catalog ./app/categories ./app/config ./app/health ./app/middleware ./models
 
       - name: Print unit test coverage
         run: |

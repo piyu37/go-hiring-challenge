@@ -2,6 +2,8 @@ COVERAGE_UNIT := coverage.unit.out
 COVERAGE_INTEGRATION := coverage.integration.out
 COVERAGE_MERGED := coverage.out
 COVERPKG := github.com/mytheresa/go-hiring-challenge/...
+# Packages with tests only (excludes cmd/* and app/database to avoid "go: no such tool covdata" on Go 1.24+).
+TEST_PACKAGES := ./app/api ./app/catalog ./app/categories ./app/config ./app/health ./app/middleware ./models
 
 tidy ::
 	@go mod tidy && go mod vendor
@@ -13,7 +15,10 @@ run ::
 	@go run cmd/server/main.go
 
 test ::
-	@go test -v -count=1 -race ./... -coverprofile=$(COVERAGE_UNIT) -covermode=atomic
+	@go test -v -count=1 -race \
+		-coverprofile=$(COVERAGE_UNIT) -covermode=atomic \
+		-coverpkg=$(COVERPKG) \
+		$(TEST_PACKAGES)
 
 integration-test ::
 	@go test -v -count=1 -tags=integration ./models/... \
