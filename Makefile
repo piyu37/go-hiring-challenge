@@ -2,7 +2,7 @@ COVERAGE_UNIT := coverage.unit.out
 COVERAGE_INTEGRATION := coverage.integration.out
 COVERAGE_MERGED := coverage.out
 COVERPKG := github.com/mytheresa/go-hiring-challenge/...
-# Packages with tests only (excludes cmd/* and app/database to avoid "go: no such tool covdata" on Go 1.24+).
+# Packages with tests only (excludes cmd/* and app/database to avoid coverage errors on packages without tests).
 TEST_PACKAGES := ./app/api ./app/catalog ./app/categories ./app/config ./app/health ./app/middleware ./models
 
 tidy ::
