@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"os"
 	"os/signal"
 	"syscall"
 	"time"
@@ -13,7 +12,10 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/mytheresa/go-hiring-challenge/app/catalog"
 	"github.com/mytheresa/go-hiring-challenge/app/categories"
+	"github.com/mytheresa/go-hiring-challenge/app/config"
 	"github.com/mytheresa/go-hiring-challenge/app/database"
+	"github.com/mytheresa/go-hiring-challenge/app/health"
+	"github.com/mytheresa/go-hiring-challenge/app/middleware"
 	"github.com/mytheresa/go-hiring-challenge/models"
 )
 
@@ -22,32 +24,44 @@ func main() {
 		log.Fatalf("Error loading .env file: %s", err)
 	}
 
+	cfg, err := config.Load()
+	if err != nil {
+		log.Fatalf("Invalid configuration: %s", err)
+	}
+
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	db, close := database.New(
-		os.Getenv("POSTGRES_USER"),
-		os.Getenv("POSTGRES_PASSWORD"),
-		os.Getenv("POSTGRES_DB"),
-		os.Getenv("POSTGRES_PORT"),
-	)
-	defer close()
+	db, closeDB, err := database.Open(ctx, cfg.Database)
+	if err != nil {
+		log.Fatalf("Database connection failed: %s", err)
+	}
+	defer closeDB()
 
 	productRepo := models.NewProductsRepository(db)
 	categoryRepo := models.NewCategoriesRepository(db)
 
-	catalogHandler := catalog.NewHandler(productRepo)
+	catalogHandler := catalog.NewHandler(productRepo, categoryRepo)
 	categoryHandler := categories.NewHandler(categoryRepo)
+	healthHandler := health.NewHandler(db)
 
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /health/live", healthHandler.HandleLive)
+	mux.HandleFunc("GET /health/ready", healthHandler.HandleReady)
 	mux.HandleFunc("GET /catalog", catalogHandler.HandleList)
 	mux.HandleFunc("GET /catalog/{code}", catalogHandler.HandleGetByCode)
 	mux.HandleFunc("GET /categories", categoryHandler.HandleList)
 	mux.HandleFunc("POST /categories", categoryHandler.HandleCreate)
 
+	var handler http.Handler = mux
+	if rateLimiter := middleware.NewRateLimit(cfg.RateLimitRPS); rateLimiter != nil {
+		handler = rateLimiter.Middleware(handler)
+	}
+	handler = middleware.Recovery(handler)
+
 	srv := &http.Server{
-		Addr:         fmt.Sprintf(":%s", os.Getenv("HTTP_PORT")),
-		Handler:      mux,
+		Addr:         fmt.Sprintf(":%s", cfg.HTTPPort),
+		Handler:      handler,
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 10 * time.Second,
 		IdleTimeout:  60 * time.Second,

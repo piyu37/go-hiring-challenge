@@ -9,11 +9,15 @@ import (
 )
 
 type Handler struct {
-	products models.ProductStore
+	products   models.ProductStore
+	categories models.CategoryStore
 }
 
-func NewHandler(products models.ProductStore) *Handler {
-	return &Handler{products: products}
+func NewHandler(products models.ProductStore, categories models.CategoryStore) *Handler {
+	return &Handler{
+		products:   products,
+		categories: categories,
+	}
 }
 
 func (h *Handler) HandleList(w http.ResponseWriter, r *http.Request) {
@@ -25,8 +29,20 @@ func (h *Handler) HandleList(w http.ResponseWriter, r *http.Request) {
 
 	priceLessThan, err := parsePriceLessThan(params.PriceLessThan)
 	if err != nil {
-		api.ErrorResponse(w, http.StatusBadRequest, "invalid price_less_than")
+		api.ErrorResponse(w, http.StatusBadRequest, err.Error())
 		return
+	}
+
+	if params.CategoryCode != "" {
+		exists, err := h.categories.ExistsByCode(r.Context(), params.CategoryCode)
+		if err != nil {
+			api.ErrorResponse(w, http.StatusInternalServerError, "failed to validate category")
+			return
+		}
+		if !exists {
+			api.ErrorResponse(w, http.StatusNotFound, "category not found")
+			return
+		}
 	}
 
 	products, total, err := h.products.List(r.Context(), models.ProductListFilter{
@@ -43,6 +59,8 @@ func (h *Handler) HandleList(w http.ResponseWriter, r *http.Request) {
 	response := ListResponse{
 		Products: make([]ProductDTO, len(products)),
 		Total:    total,
+		Offset:   params.Offset,
+		Limit:    params.Limit,
 	}
 	for i, p := range products {
 		response.Products[i] = toProductDTO(p)

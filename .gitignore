@@ -1,3 +1,5 @@
 /vendor
 coverage.out
+coverage.unit.out
+coverage.integration.out
 .env

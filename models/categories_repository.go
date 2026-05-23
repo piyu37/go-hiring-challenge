@@ -38,4 +38,17 @@ func (r *CategoriesRepository) Create(ctx context.Context, category *Category) e
 	return err
 }
 
+func (r *CategoriesRepository) ExistsByCode(ctx context.Context, code string) (bool, error) {
+	var count int64
+	err := r.db.WithContext(ctx).
+		Model(&Category{}).
+		Where("code = ?", code).
+		Count(&count).Error
+	if err != nil {
+		return false, err
+	}
+
+	return count > 0, nil
+}
+
 var ErrDuplicate = errors.New("duplicate record")

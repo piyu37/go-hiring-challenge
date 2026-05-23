@@ -12,4 +12,5 @@ type ProductStore interface {
 type CategoryStore interface {
 	ListAll(ctx context.Context) ([]Category, error)
 	Create(ctx context.Context, category *Category) error
+	ExistsByCode(ctx context.Context, code string) (bool, error)
 }

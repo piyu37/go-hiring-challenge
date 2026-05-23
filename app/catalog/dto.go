@@ -1,6 +1,8 @@
 package catalog
 
 import (
+	"fmt"
+
 	"github.com/mytheresa/go-hiring-challenge/models"
 	"github.com/shopspring/decimal"
 )
@@ -25,6 +27,8 @@ type VariantDTO struct {
 type ListResponse struct {
 	Products []ProductDTO `json:"products"`
 	Total    int64        `json:"total"`
+	Offset   int          `json:"offset"`
+	Limit    int          `json:"limit"`
 }
 
 type DetailResponse struct {
@@ -76,6 +80,10 @@ func parsePriceLessThan(raw string) (*decimal.Decimal, error) {
 	price, err := decimal.NewFromString(raw)
 	if err != nil {
 		return nil, err
+	}
+
+	if price.IsNegative() {
+		return nil, fmt.Errorf("price_less_than must be non-negative")
 	}
 
 	return &price, nil

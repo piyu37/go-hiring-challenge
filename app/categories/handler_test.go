@@ -20,11 +20,21 @@ type mockCategoryStore struct {
 }
 
 func (m *mockCategoryStore) ListAll(ctx context.Context) ([]models.Category, error) {
+	if m.listAllFn == nil {
+		return nil, nil
+	}
 	return m.listAllFn(ctx)
 }
 
 func (m *mockCategoryStore) Create(ctx context.Context, category *models.Category) error {
+	if m.createFn == nil {
+		return nil
+	}
 	return m.createFn(ctx, category)
+}
+
+func (m *mockCategoryStore) ExistsByCode(context.Context, string) (bool, error) {
+	return true, nil
 }
 
 func TestHandleList(t *testing.T) {

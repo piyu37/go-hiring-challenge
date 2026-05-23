@@ -20,11 +20,36 @@ type mockProductStore struct {
 }
 
 func (m *mockProductStore) List(ctx context.Context, filter models.ProductListFilter) ([]models.Product, int64, error) {
+	if m.listFn == nil {
+		return nil, 0, nil
+	}
 	return m.listFn(ctx, filter)
 }
 
 func (m *mockProductStore) GetByCode(ctx context.Context, code string) (*models.Product, error) {
+	if m.getByCodeFn == nil {
+		return nil, models.ErrNotFound
+	}
 	return m.getByCodeFn(ctx, code)
+}
+
+type mockCategoryStore struct {
+	existsByCodeFn func(ctx context.Context, code string) (bool, error)
+}
+
+func (m *mockCategoryStore) ListAll(context.Context) ([]models.Category, error) {
+	return nil, nil
+}
+
+func (m *mockCategoryStore) Create(context.Context, *models.Category) error {
+	return nil
+}
+
+func (m *mockCategoryStore) ExistsByCode(ctx context.Context, code string) (bool, error) {
+	if m.existsByCodeFn == nil {
+		return true, nil
+	}
+	return m.existsByCodeFn(ctx, code)
 }
 
 func sampleProduct() models.Product {
@@ -57,7 +82,7 @@ func TestHandleList(t *testing.T) {
 			},
 		}
 
-		handler := NewHandler(store)
+		handler := NewHandler(store, &mockCategoryStore{})
 		req := httptest.NewRequest(http.MethodGet, "/catalog", nil)
 		rec := httptest.NewRecorder()
 
@@ -68,6 +93,8 @@ func TestHandleList(t *testing.T) {
 		var body ListResponse
 		require.NoError(t, json.NewDecoder(rec.Body).Decode(&body))
 		assert.Equal(t, int64(1), body.Total)
+		assert.Equal(t, 0, body.Offset)
+		assert.Equal(t, 10, body.Limit)
 		require.Len(t, body.Products, 1)
 		assert.Equal(t, "PROD001", body.Products[0].Code)
 		assert.Equal(t, "clothing", body.Products[0].Category.Code)
@@ -82,13 +109,18 @@ func TestHandleList(t *testing.T) {
 			},
 		}
 
-		handler := NewHandler(store)
+		handler := NewHandler(store, &mockCategoryStore{})
 		req := httptest.NewRequest(http.MethodGet, "/catalog?offset=5&limit=20", nil)
 		rec := httptest.NewRecorder()
 
 		handler.HandleList(rec, req)
 
 		assert.Equal(t, http.StatusOK, rec.Code)
+
+		var body ListResponse
+		require.NoError(t, json.NewDecoder(rec.Body).Decode(&body))
+		assert.Equal(t, 5, body.Offset)
+		assert.Equal(t, 20, body.Limit)
 	})
 
 	t.Run("applies category and price_less_than filters", func(t *testing.T) {
@@ -101,7 +133,14 @@ func TestHandleList(t *testing.T) {
 			},
 		}
 
-		handler := NewHandler(store)
+		categories := &mockCategoryStore{
+			existsByCodeFn: func(_ context.Context, code string) (bool, error) {
+				assert.Equal(t, "clothing", code)
+				return true, nil
+			},
+		}
+
+		handler := NewHandler(store, categories)
 		req := httptest.NewRequest(http.MethodGet, "/catalog?category=clothing&price_less_than=20", nil)
 		rec := httptest.NewRecorder()
 
@@ -110,8 +149,24 @@ func TestHandleList(t *testing.T) {
 		assert.Equal(t, http.StatusOK, rec.Code)
 	})
 
+	t.Run("returns 404 for unknown category", func(t *testing.T) {
+		categories := &mockCategoryStore{
+			existsByCodeFn: func(_ context.Context, _ string) (bool, error) {
+				return false, nil
+			},
+		}
+
+		handler := NewHandler(&mockProductStore{}, categories)
+		req := httptest.NewRequest(http.MethodGet, "/catalog?category=unknown", nil)
+		rec := httptest.NewRecorder()
+
+		handler.HandleList(rec, req)
+
+		assert.Equal(t, http.StatusNotFound, rec.Code)
+	})
+
 	t.Run("returns 400 for invalid limit", func(t *testing.T) {
-		handler := NewHandler(&mockProductStore{})
+		handler := NewHandler(&mockProductStore{}, &mockCategoryStore{})
 		req := httptest.NewRequest(http.MethodGet, "/catalog?limit=0", nil)
 		rec := httptest.NewRecorder()
 
@@ -121,8 +176,18 @@ func TestHandleList(t *testing.T) {
 	})
 
 	t.Run("returns 400 for invalid price_less_than", func(t *testing.T) {
-		handler := NewHandler(&mockProductStore{})
+		handler := NewHandler(&mockProductStore{}, &mockCategoryStore{})
 		req := httptest.NewRequest(http.MethodGet, "/catalog?price_less_than=abc", nil)
+		rec := httptest.NewRecorder()
+
+		handler.HandleList(rec, req)
+
+		assert.Equal(t, http.StatusBadRequest, rec.Code)
+	})
+
+	t.Run("returns 400 for negative price_less_than", func(t *testing.T) {
+		handler := NewHandler(&mockProductStore{}, &mockCategoryStore{})
+		req := httptest.NewRequest(http.MethodGet, "/catalog?price_less_than=-1", nil)
 		rec := httptest.NewRecorder()
 
 		handler.HandleList(rec, req)
@@ -137,7 +202,7 @@ func TestHandleList(t *testing.T) {
 			},
 		}
 
-		handler := NewHandler(store)
+		handler := NewHandler(store, &mockCategoryStore{})
 		req := httptest.NewRequest(http.MethodGet, "/catalog", nil)
 		rec := httptest.NewRecorder()
 
@@ -157,7 +222,7 @@ func TestHandleGetByCode(t *testing.T) {
 			},
 		}
 
-		handler := NewHandler(store)
+		handler := NewHandler(store, &mockCategoryStore{})
 		req := httptest.NewRequest(http.MethodGet, "/catalog/PROD001", nil)
 		req.SetPathValue("code", "PROD001")
 		rec := httptest.NewRecorder()
@@ -182,7 +247,7 @@ func TestHandleGetByCode(t *testing.T) {
 			},
 		}
 
-		handler := NewHandler(store)
+		handler := NewHandler(store, &mockCategoryStore{})
 		req := httptest.NewRequest(http.MethodGet, "/catalog/UNKNOWN", nil)
 		req.SetPathValue("code", "UNKNOWN")
 		rec := httptest.NewRecorder()
