@@ -1,0 +1,256 @@
+openapi: 3.0.3
+info:
+  title: Go Hiring Challenge API
+  version: 1.0.0
+  description: REST API for product catalog and category management.
+
+servers:
+  - url: http://localhost:8484
+    description: Local development
+
+paths:
+  /health/live:
+    get:
+      summary: Liveness probe
+      description: Returns 200 when the process is running.
+      responses:
+        "200":
+          description: Process is alive
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StatusResponse"
+
+  /health/ready:
+    get:
+      summary: Readiness probe
+      description: Returns 200 when the database connection is healthy.
+      responses:
+        "200":
+          description: Service is ready
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StatusResponse"
+        "503":
+          description: Database unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /catalog:
+    get:
+      summary: List products
+      parameters:
+        - in: query
+          name: offset
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+        - in: query
+          name: category
+          schema:
+            type: string
+          description: Filter by category code
+        - in: query
+          name: price_less_than
+          schema:
+            type: number
+            minimum: 0
+          description: Filter products with price below this value
+      responses:
+        "200":
+          description: Paginated product list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CatalogListResponse"
+        "400":
+          description: Invalid query parameters
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Category not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /catalog/{code}:
+    get:
+      summary: Get product details
+      parameters:
+        - in: path
+          name: code
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Product details with variants
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProductDetailResponse"
+        "404":
+          description: Product not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /categories:
+    get:
+      summary: List categories
+      responses:
+        "200":
+          description: Category list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CategoryListResponse"
+    post:
+      summary: Create category
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CategoryInput"
+      responses:
+        "201":
+          description: Category created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Category"
+        "400":
+          description: Invalid request body
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Category already exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+components:
+  schemas:
+    StatusResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: ok
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+
+    Category:
+      type: object
+      properties:
+        code:
+          type: string
+          example: clothing
+        name:
+          type: string
+          example: Clothing
+
+    CategoryInput:
+      type: object
+      required:
+        - code
+        - name
+      properties:
+        code:
+          type: string
+        name:
+          type: string
+
+    CategoryListResponse:
+      type: object
+      properties:
+        categories:
+          type: array
+          items:
+            $ref: "#/components/schemas/Category"
+
+    CatalogProduct:
+      type: object
+      properties:
+        code:
+          type: string
+          example: PROD001
+        price:
+          type: number
+          format: float
+          example: 10.99
+        category:
+          $ref: "#/components/schemas/Category"
+
+    CatalogListResponse:
+      type: object
+      properties:
+        products:
+          type: array
+          items:
+            $ref: "#/components/schemas/CatalogProduct"
+        total:
+          type: integer
+          format: int64
+          example: 8
+        offset:
+          type: integer
+          example: 0
+        limit:
+          type: integer
+          example: 10
+
+    Variant:
+      type: object
+      properties:
+        name:
+          type: string
+        sku:
+          type: string
+        price:
+          type: number
+          format: float
+
+    ProductDetailResponse:
+      type: object
+      properties:
+        code:
+          type: string
+        price:
+          type: number
+          format: float
+        category:
+          $ref: "#/components/schemas/Category"
+        variants:
+          type: array
+          items:
+            $ref: "#/components/schemas/Variant"
